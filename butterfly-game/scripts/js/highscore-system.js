@@ -924,6 +924,108 @@ class HighScoreSystem {
     }
 
     /**
+     * Show clear instructions before submitting a high score
+     * @param {string} playerName - Player name
+     * @param {number} score - Score value 
+     */
+    showSubmissionInstructions(playerName, score) {
+        // Create modal background
+        const modalBackground = document.createElement('div');
+        modalBackground.className = 'modal-background';
+        
+        // Create modal content
+        const modalContent = document.createElement('div');
+        modalContent.className = 'modal-content';
+        
+        // Title
+        const title = document.createElement('h2');
+        title.textContent = 'Global Score Submission';
+        title.style.color = '#0055A4';
+        title.style.marginBottom = '15px';
+        
+        // Instructions
+        const instructions = document.createElement('div');
+        instructions.className = 'submission-instructions';
+        instructions.innerHTML = `
+            <p>Your score of <strong>${score} points</strong> will be:</p>
+            
+            <ol>
+                <li><strong>Saved locally</strong> on this device (available even offline)</li>
+                <li><strong>Submitted globally</strong> to the online leaderboard (if connected to the internet)</li>
+            </ol>
+            
+            <div class="warning-box">
+                <p>⚠️ Global submission details:</p>
+                <ul>
+                    <li>Your name and score will be publicly visible to all players</li>
+                    <li>The score is submitted through GitHub</li>
+                    <li>Global scores may take a few minutes to appear on the leaderboard</li>
+                    <li>If you're playing offline, your score will still be saved locally</li>
+                </ul>
+            </div>
+            
+            <p><strong>Enter your name to continue:</strong></p>
+        `;
+        
+        // Name input field
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = playerName || '';
+        nameInput.placeholder = 'Enter your name';
+        nameInput.maxLength = 20;
+        nameInput.style.width = '100%';
+        nameInput.style.padding = '10px';
+        nameInput.style.fontSize = '18px';
+        nameInput.style.marginTop = '10px';
+        nameInput.style.marginBottom = '20px';
+        nameInput.style.borderRadius = '5px';
+        nameInput.style.border = '1px solid #ccc';
+        
+        // Button container
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'modal-buttons';
+        
+        // Cancel button
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.className = 'modal-button cancel';
+        cancelBtn.addEventListener('click', () => {
+            document.body.removeChild(modalBackground);
+        });
+        
+        // Submit button
+        const submitBtn = document.createElement('button');
+        submitBtn.textContent = 'Submit Score';
+        submitBtn.className = 'modal-button primary';
+        submitBtn.addEventListener('click', async () => {
+            const finalName = nameInput.value.trim() || 'Anonymous';
+            document.body.removeChild(modalBackground);
+            await this.submitHighScore(finalName, score);
+        });
+        
+        // Handle enter key in input
+        nameInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                submitBtn.click();
+            }
+        });
+        
+        // Assemble modal
+        buttonContainer.appendChild(cancelBtn);
+        buttonContainer.appendChild(submitBtn);
+        
+        modalContent.appendChild(title);
+        modalContent.appendChild(instructions);
+        modalContent.appendChild(nameInput);
+        modalContent.appendChild(buttonContainer);
+        modalBackground.appendChild(modalContent);
+        
+        // Add to document and focus input
+        document.body.appendChild(modalBackground);
+        setTimeout(() => nameInput.focus(), 100);
+    }
+
+    /**
      * Submit a high score
      * @param {string} playerName - Player name
      * @param {number} score - Score value

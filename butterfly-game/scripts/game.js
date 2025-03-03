@@ -411,33 +411,58 @@ class Game {
                     // Try playing the local file first (the asset in the game folder)
                     console.log("Creating and playing new sound instance");
                     
-                    // Create a fresh sound object
-                    const startSound = new Audio('assets/sounds/sound-start.m4a');
-                    startSound.volume = 5.0; // 5 times louder!
+                    // Try multiple file locations and formats to ensure start sound works
+                    const soundFiles = [
+                        'assets/sounds/sound-start.m4a',
+                        'assets/sounds/start-sound.mp3',
+                        'assets/sounds/sound-start.mp3',
+                        'assets/sounds/start-sound.m4a'
+                    ];
                     
                     // Track whether any sound has been played
                     let soundPlayed = false;
                     
                     // Try to play the primary sound with timeout
                     const playPrimarySound = async () => {
-                        try {
-                            await startSound.load();
-                            console.log("Start sound loaded, playing...");
-                            const playPromise = startSound.play();
-                            
-                            if (playPromise !== undefined) {
-                                playPromise.then(() => {
-                                    console.log("Primary start sound playing successfully");
-                                    soundPlayed = true;
-                                }).catch(err => {
-                                    console.log("Failed to play primary sound:", err);
-                                    playFallbackSound();
+                        // Try each sound file in sequence until one works
+                        for (const soundPath of soundFiles) {
+                            try {
+                                console.log(`Trying sound file: ${soundPath}`);
+                                const startSound = new Audio(soundPath);
+                                startSound.volume = 1.0; // Normal volume - setting to 5.0 breaks audio
+                                
+                                // Pre-load the sound
+                                await new Promise((resolve) => {
+                                    startSound.oncanplaythrough = resolve;
+                                    startSound.onerror = () => {
+                                        console.log(`Error loading sound: ${soundPath}`);
+                                        resolve(); // Resolve anyway to try next sound
+                                    };
+                                    // Timeout after 500ms
+                                    setTimeout(resolve, 500);
                                 });
+                                
+                                // If sound loaded successfully, play it
+                                if (!startSound.error) {
+                                    console.log(`${soundPath} loaded, playing...`);
+                                    const playPromise = startSound.play();
+                                    
+                                    if (playPromise !== undefined) {
+                                        await playPromise;
+                                        console.log(`${soundPath} playing successfully`);
+                                        soundPlayed = true;
+                                        return; // Exit the loop if we successfully played a sound
+                                    }
+                                }
+                            } catch (err) {
+                                console.log(`Error with sound ${soundPath}:`, err);
+                                // Continue to next sound file
                             }
-                        } catch (err) {
-                            console.log("Error loading primary sound:", err);
-                            playFallbackSound();
                         }
+                        
+                        // If we get here, none of the sound files worked
+                        console.log("All sound files failed, using fallback");
+                        playFallbackSound();
                     };
                     
                     // Fallback to embedded sound if local file fails
@@ -447,7 +472,7 @@ class Game {
                         try {
                             console.log("Trying fallback embedded sound");
                             const fallbackSound = new Audio(clickSoundBase64);
-                            fallbackSound.volume = 1.0;
+                            fallbackSound.volume = 0.8; // Slightly quieter for embedded sound since it might be harsh
                             fallbackSound.play().then(() => {
                                 console.log("Fallback sound played successfully");
                                 soundPlayed = true;
@@ -2150,8 +2175,13 @@ class Game {
                 y >= this.summaryButtons.saveRecord.y && 
                 y <= this.summaryButtons.saveRecord.y + this.summaryButtons.saveRecord.height) {
                 
-                // Show name input popup instead of immediately saving
-                this.showNameInputPopup();
+                // Go directly to high score submission instructions instead of showing name popup
+                if (window.highScoreSystem) {
+                    window.highScoreSystem.showSubmissionInstructions('', this.score);
+                } else {
+                    // Fallback to old method if high score system isn't available
+                    this.showNameInputPopup();
+                }
             }
             
             // Check if View Records button was clicked
@@ -2450,7 +2480,8 @@ class Game {
         // Get the entered name (or use default if empty)
         const playerName = this.playerNameInput.trim() || 'Anonymous';
         
-        // Save the game record with the player name
+        // Use the legacy method directly - we no longer need the intermediate step
+        // since we're going straight to the highscore instructions from the button click
         this.saveGameRecords(playerName);
         
         // Show confirmation
@@ -2570,10 +2601,10 @@ class Game {
             console.log('Error saving game record:', e);
         }
         
-        // Submit to high score system if available
+        // Submit to high score system if available - use the new instruction modal instead
         if (window.highScoreSystem) {
-            console.log('Submitting score to high score system:', playerName, this.score);
-            window.highScoreSystem.submitHighScore(playerName, this.score);
+            console.log('Showing high score submission instructions');
+            window.highScoreSystem.showSubmissionInstructions(playerName, this.score);
         }
     }
     
