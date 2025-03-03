@@ -124,12 +124,26 @@
     <script src="scripts/butterfly.js"></script>
     <script src="scripts/player.js"></script>
     <script src="scripts/game.js"></script>
+    <script src="scripts/js/highscore-system.js"></script>
     
     <!-- Script to initialize game after everything loads -->
     <script>
         window.addEventListener('load', function() {
             // Hide loading indicator after a small delay to ensure rendering
             setTimeout(hideLoading, 1000);
+
+            // Fix any console errors on startup by ensuring the highScoreSystem exists
+            if (!window.highScoreSystem) {
+                console.log("Creating high score system at window load");
+                window.highScoreSystem = {
+                    submitHighScore: function(name, score) {
+                        console.log("Fallback score submission:", name, score);
+                    },
+                    toggleDisplay: function(show) {
+                        console.log("Fallback toggle display:", show);
+                    }
+                };
+            }
         });
     </script>
 

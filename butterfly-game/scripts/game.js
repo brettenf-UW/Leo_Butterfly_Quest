@@ -374,11 +374,17 @@ class Game {
             }
         }
         
+        // Hide high score panel on start screen
+        if (window.highScoreSystem) {
+            window.highScoreSystem.toggleDisplay(false);
+        }
+        
         // Setup start screen click handlers
         const buttonY = this.canvas.height/2 + 20;
         const buttonWidth = 220;
         const buttonHeight = 60;
         const instructionsY = buttonY + 80;
+        const highScoreY = instructionsY + 80;
         
         // Add click listener for buttons
         const startScreenClick = (e) => {
@@ -407,7 +413,7 @@ class Game {
                     
                     // Create a fresh sound object
                     const startSound = new Audio('assets/sounds/sound-start.m4a');
-                    startSound.volume = 1.0;
+                    startSound.volume = 5.0; // 5 times louder!
                     
                     // Track whether any sound has been played
                     let soundPlayed = false;
@@ -483,6 +489,21 @@ class Game {
                 this.canvas.removeEventListener('click', startScreenClick);
                 this.showInstructions();
             }
+            
+            // Check if high scores button was clicked
+            if (x >= this.canvas.width/2 - buttonWidth/2 && 
+                x <= this.canvas.width/2 + buttonWidth/2 && 
+                y >= highScoreY - buttonHeight/2 && 
+                y <= highScoreY + buttonHeight/2) {
+                
+                // Toggle high score panel
+                if (window.highScoreSystem) {
+                    // Keep this handler active, just toggle the panel
+                    const isVisible = window.highScoreSystem.container && 
+                                     window.highScoreSystem.container.style.display === 'block';
+                    window.highScoreSystem.toggleDisplay(!isVisible);
+                }
+            }
         };
         
         this.canvas.addEventListener('click', startScreenClick);
@@ -496,7 +517,7 @@ class Game {
         
         // Semi-transparent overlay
         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-        this.ctx.fillRect(this.canvas.width/2 - 250, this.canvas.height/3 - 80, 500, 400);
+        this.ctx.fillRect(this.canvas.width/2 - 250, this.canvas.height/3 - 80, 500, 500); // Made taller for high scores button
         
         // Game title with fun shadow effect
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -537,11 +558,20 @@ class Game {
         this.ctx.font = 'bold 28px Arial';
         this.ctx.fillText('Instructions', this.canvas.width/2, instructionsY + 10);
         
+        // Add high scores button
+        const highScoreY = instructionsY + 80;
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        this.ctx.fillRect(this.canvas.width/2 - buttonWidth/2, highScoreY - buttonHeight/2, buttonWidth, buttonHeight);
+        
+        this.ctx.fillStyle = '#0055A4';  // French flag blue
+        this.ctx.font = 'bold 28px Arial';
+        this.ctx.fillText('High Scores', this.canvas.width/2, highScoreY + 10);
+        
         // Add French flag decoration
         const flagWidth = 80;
         const flagHeight = 50;
         const flagX = this.canvas.width/2 - flagWidth/2;
-        const flagY = instructionsY + 40;
+        const flagY = highScoreY + 40;
         
         // Blue part
         this.ctx.fillStyle = '#0055A4';
@@ -718,6 +748,11 @@ class Game {
         // Ensure countdown happens (music already playing)
         this.countdownActive = true;
         this.countdownTime = 3;
+        
+        // Hide high score panel during gameplay
+        if (window.highScoreSystem) {
+            window.highScoreSystem.toggleDisplay(false);
+        }
         
         console.log("Starting game at level:", this.currentLevel);
         
@@ -1562,6 +1597,11 @@ class Game {
         // Show summary screen with butterfly statistics
         this.renderSummaryScreen();
         
+        // Show high score panel if available
+        if (window.highScoreSystem) {
+            window.highScoreSystem.toggleDisplay(true);
+        }
+        
         // Add click listener for play again button and save record buttons
         // This will remain active until the player clicks Play Again
         this.setupSummaryScreenListeners();
@@ -2120,9 +2160,14 @@ class Game {
                 y >= this.summaryButtons.viewRecords.y && 
                 y <= this.summaryButtons.viewRecords.y + this.summaryButtons.viewRecords.height) {
                 
-                // Set flag to show records modal and render it
-                this.showingRecordsModal = true;
-                this.renderRecordsModal();
+                // Show the high score system instead if available
+                if (window.highScoreSystem) {
+                    window.highScoreSystem.toggleDisplay(true);
+                } else {
+                    // Fallback to old system if high score system is not available
+                    this.showingRecordsModal = true;
+                    this.renderRecordsModal();
+                }
             }
         };
         
@@ -2523,6 +2568,12 @@ class Game {
             console.log('Game record saved successfully!');
         } catch (e) {
             console.log('Error saving game record:', e);
+        }
+        
+        // Submit to high score system if available
+        if (window.highScoreSystem) {
+            console.log('Submitting score to high score system:', playerName, this.score);
+            window.highScoreSystem.submitHighScore(playerName, this.score);
         }
     }
     
