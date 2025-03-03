@@ -540,26 +540,42 @@ class Game {
     renderStartScreen() {
         console.log("Drawing start screen content");
         
-        // Semi-transparent overlay
+        // Determine if we're on a small screen
+        const isSmallScreen = this.canvas.width < 600 || this.canvas.height < 500;
+        
+        // Adjust overlay size for small screens
+        let overlayWidth = isSmallScreen ? Math.min(400, this.canvas.width * 0.9) : 500;
+        let overlayHeight = isSmallScreen ? Math.min(450, this.canvas.height * 0.8) : 500;
+        
+        // Semi-transparent overlay (centered)
         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-        this.ctx.fillRect(this.canvas.width/2 - 250, this.canvas.height/3 - 80, 500, 500); // Made taller for high scores button
+        this.ctx.fillRect(
+            this.canvas.width/2 - overlayWidth/2, 
+            this.canvas.height/3 - 80, 
+            overlayWidth, 
+            overlayHeight
+        );
+        
+        // Adjust font sizes for small screens
+        const titleFontSize = isSmallScreen ? 40 : 54;
+        const subtitleFontSize = isSmallScreen ? 20 : 24;
         
         // Game title with fun shadow effect
         this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        this.ctx.font = 'bold 54px Arial';
+        this.ctx.font = `bold ${titleFontSize}px Arial`;
         this.ctx.textAlign = 'center';
         this.ctx.fillText('Le Chasseur de', this.canvas.width/2, this.canvas.height/3 - 20);
         this.ctx.fillText('Papillons', this.canvas.width/2, this.canvas.height/3 + 40);
         
         // Fun subtitle
         this.ctx.fillStyle = '#EF4135';  // French flag red
-        this.ctx.font = 'italic 24px Arial';
+        this.ctx.font = `italic ${subtitleFontSize}px Arial`;
         this.ctx.fillText("Leo's Butterfly Adventure", this.canvas.width/2, this.canvas.height/3 + 80);
         
-        // Add start button with animation effect
+        // Adjust button size for small screens
+        const buttonWidth = isSmallScreen ? 180 : 220;
+        const buttonHeight = isSmallScreen ? 50 : 60;
         const buttonY = this.canvas.height/2 + 20;
-        const buttonWidth = 220;
-        const buttonHeight = 60;
         
         // Button background with glow
         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
@@ -1671,7 +1687,8 @@ class Game {
         }
         
         // Determine if we're on a small screen and need compact layout
-        const isSmallScreen = this.canvas.height < 600 || this.canvas.width < 800;
+        // More aggressive small screen detection to handle more devices
+        const isSmallScreen = this.canvas.height < 700 || this.canvas.width < 1000;
         
         // Dynamic sizing constants - adjust based on screen size
         const TITLE_HEIGHT = isSmallScreen ? 40 : 60;
@@ -1774,11 +1791,11 @@ class Game {
             [1, 2, 5, 8, 10] : // Show only key levels on small screens
             [...Array(this.maxLevel).keys()].map(i => i + 1); // Show all levels otherwise
         
-        // Prepare for statistics rows
-        const statsMargin = isSmallScreen ? 40 : 50;
+        // Prepare for statistics rows with adjustments for butterfly images
+        const statsMargin = isSmallScreen ? 30 : 40; // Reduced margin for more space
         const statsStartX = panelX + statsMargin;
         const barAreaWidth = panelWidth - (statsMargin * 2);
-        const labelWidth = isSmallScreen ? 130 : 160;
+        const labelWidth = isSmallScreen ? 80 : 100; // Reduced since we're using images now
         const barWidth = barAreaWidth - labelWidth - (isSmallScreen ? 50 : 60);
         const countWidth = isSmallScreen ? 40 : 50;
         
@@ -1794,8 +1811,9 @@ class Game {
             const level = displayLevels[i];
             const count = this.butterflyCounts[level] || 0;
             
-            // Special handling for level 10 (boss)
-            const levelName = level === 10 ? "Queen Butterfly" : `Level ${level} Butterflies`;
+            // Get the butterfly image for this level
+            const imgIndex = Math.min(level - 1, this.butterflyImages.length - 1);
+            const butterflyImg = this.butterflyImages[imgIndex];
             
             // Calculate positions
             const labelX = statsStartX;
@@ -1815,11 +1833,38 @@ class Game {
             this.ctx.fillStyle = `hsl(${hue}, 80%, 60%)`;
             this.ctx.fillRect(barX, currentY - (isSmallScreen ? 12 : 14), actualBarWidth, barHeight);
             
-            // Level name (right-aligned)
-            this.ctx.fillStyle = '#333';
-            this.ctx.textAlign = 'right';
-            this.ctx.font = `${isSmallScreen ? 14 : 16}px Arial`;
-            this.ctx.fillText(levelName, barX - 10, currentY);
+            // Draw butterfly image instead of text
+            const butterflySize = isSmallScreen ? 20 : 25;
+            if (butterflyImg && butterflyImg.complete && butterflyImg.naturalWidth !== 0) {
+                // Draw butterfly with vertical centering
+                this.ctx.drawImage(
+                    butterflyImg, 
+                    labelX, 
+                    currentY - butterflySize/2 - 3, // Adjust for vertical centering
+                    butterflySize, 
+                    butterflySize
+                );
+                
+                // Also add a small level indicator
+                this.ctx.fillStyle = '#555';
+                this.ctx.textAlign = 'left';
+                this.ctx.font = `${isSmallScreen ? 11 : 12}px Arial`;
+                this.ctx.fillText(`L${level}`, labelX + butterflySize + 5, currentY);
+                
+                // Special indicator for Queen Butterfly
+                if (level === 10) {
+                    this.ctx.fillStyle = '#FF4500'; // Orange-red for Queen
+                    this.ctx.font = `bold ${isSmallScreen ? 10 : 11}px Arial`;
+                    this.ctx.fillText('Queen', labelX + butterflySize + 25, currentY);
+                }
+            } else {
+                // Fallback if image not loaded
+                this.ctx.fillStyle = '#333';
+                this.ctx.textAlign = 'right';
+                this.ctx.font = `${isSmallScreen ? 14 : 16}px Arial`;
+                const levelName = level === 10 ? "Queen Butterfly" : `Level ${level}`;
+                this.ctx.fillText(levelName, barX - 10, currentY);
+            }
             
             // Count text (left-aligned)
             this.ctx.textAlign = 'left';
@@ -1834,7 +1879,7 @@ class Game {
             this.ctx.textAlign = 'center';
             this.ctx.fillStyle = '#666';
             this.ctx.font = 'italic 12px Arial';
-            this.ctx.fillText('(Some levels omitted for space)', centerX, currentY);
+            this.ctx.fillText('(Zoom out to see all your catches)', centerX, currentY);
             currentY += STATS_ROW_HEIGHT;
         }
         
@@ -2653,8 +2698,25 @@ class Game {
     }
     
     resizeCanvas() {
+        // Simpler approach that doesn't use device pixel ratio scaling 
+        // but ensures everything is properly sized and centered
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
+        
+        // Log the canvas size for debugging
+        console.log(`Canvas resized to: ${this.canvas.width}x${this.canvas.height}`);
+        
+        // Clear the entire canvas to ensure no artifacts
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Redraw content immediately to prevent flickering
+        if (this.showingStartScreen) {
+            this.renderStartScreen();
+        } else if (this.showingInstructions) {
+            this.renderInstructionsScreen();
+        } else if (this.showingSummaryScreen) {
+            this.renderSummaryScreen();
+        }
     }
 }
 

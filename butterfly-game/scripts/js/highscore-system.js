@@ -1,23 +1,33 @@
 /**
  * High Score System for Leo's Butterfly Quest
- * Supports both global (GitHub-based) and local (localStorage-based) high scores
+ * Supports both global (Firebase-based) and local (localStorage-based) high scores
+ * 
+ * Firebase Integration:
+ * - Stores scores in Firebase Realtime Database when online
+ * - Loads scores from Firebase when online
+ * - Uses localStorage for offline play
+ * - Provides real-time updates when scores change
  */
 
 class HighScoreSystem {
     constructor() {
         this.localScores = [];
         this.globalScores = [];
-        this.combinedScores = []; // New array for combined scores
+        this.combinedScores = []; // Array for combined scores
         this.lastSubmissionTime = 0;
-        this.submissionCooldown = 10000; // 10 seconds between submissions to avoid API rate limits
+        this.submissionCooldown = 3000; // 3 seconds between submissions to avoid Firebase write limits
         this.initialized = false;
         this.container = null;
         this.environment = 'local'; // Default value, will be updated in init()
+        this.isFirebaseConnected = false;
+        this.realtimeUpdateActive = false;
+        this.connectedRef = null;
         
         // Bindings
         this.exportScores = this.exportScores.bind(this);
         this.importScores = this.importScores.bind(this);
         this.fileInputChange = this.fileInputChange.bind(this);
+        this.setupRealtimeScoreUpdates = this.setupRealtimeScoreUpdates.bind(this);
     }
 
     /**
@@ -54,6 +64,11 @@ class HighScoreSystem {
             this.environment = this.detectEnvironment();
             console.log('Detected environment:', this.environment);
             
+            // Check Firebase connection
+            if (this.environment === 'online') {
+                this.checkFirebaseConnection();
+            }
+            
             // Load scores based on environment
             await this.loadHighScores();
             
@@ -62,12 +77,69 @@ class HighScoreSystem {
                 this.createScoreUI();
             }
             
+            // Setup realtime updates if online
+            if (this.environment === 'online') {
+                this.setupRealtimeScoreUpdates();
+            }
+            
             this.initialized = true;
             console.log(`High score system initialized in ${this.environment} mode`);
         } catch (e) {
             console.error('Error initializing high score system:', e);
             // Create a simple fallback UI
             this.createFallbackUI();
+        }
+    }
+    
+    /**
+     * Check if Firebase is connected
+     */
+    checkFirebaseConnection() {
+        try {
+            if (!window.firebaseDatabase) {
+                console.warn('Firebase database not initialized - running in offline mode');
+                this.isFirebaseConnected = false;
+                this.environment = 'local'; // Force local mode if Firebase not available
+                
+                // Update status in UI
+                const statusMessage = document.getElementById('status-message');
+                if (statusMessage) {
+                    statusMessage.innerHTML = 'Running in offline mode <span class="connection-badge disconnected">●</span>';
+                }
+                return;
+            }
+            
+            // Monitor connection state
+            try {
+                this.connectedRef = window.firebaseDatabase.ref('.info/connected');
+                this.connectedRef.on('value', (snap) => {
+                    this.isFirebaseConnected = (snap.val() === true);
+                    console.log('Firebase connection state:', this.isFirebaseConnected ? 'Connected' : 'Disconnected');
+                    
+                    // Update status in UI
+                    const statusMessage = document.getElementById('status-message');
+                    if (statusMessage) {
+                        if (this.isFirebaseConnected) {
+                            statusMessage.innerHTML = 'Connected to online leaderboard <span class="connection-badge connected">●</span>';
+                        } else {
+                            statusMessage.innerHTML = 'Not connected to online leaderboard <span class="connection-badge disconnected">●</span>';
+                        }
+                    }
+                });
+            } catch (connectionError) {
+                console.warn('Could not monitor Firebase connection - running in offline mode');
+                this.isFirebaseConnected = false;
+                
+                // Update status in UI
+                const statusMessage = document.getElementById('status-message');
+                if (statusMessage) {
+                    statusMessage.innerHTML = 'Running in offline mode <span class="connection-badge disconnected">●</span>';
+                }
+            }
+        } catch (e) {
+            console.error('Error checking Firebase connection:', e);
+            this.isFirebaseConnected = false;
+            this.environment = 'local'; // Force local mode on error
         }
     }
 
@@ -192,7 +264,14 @@ class HighScoreSystem {
         statusMessage.id = 'status-message';
         
         // Assemble container
+        // Live update indicator
+        const liveUpdateIndicator = document.createElement('div');
+        liveUpdateIndicator.id = 'live-update-indicator';
+        liveUpdateIndicator.className = 'live-update-indicator';
+        liveUpdateIndicator.textContent = 'LIVE';
+        
         this.container.appendChild(header);
+        this.container.appendChild(liveUpdateIndicator);
         this.container.appendChild(scoresDisplay);
         this.container.appendChild(scoreActions);
         this.container.appendChild(statusMessage);
@@ -219,6 +298,41 @@ class HighScoreSystem {
         const style = document.createElement('style');
         style.id = 'highscore-styles';
         style.textContent = `
+            /* Connection status styles */
+            .connection-badge {
+                display: inline-block;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                margin-left: 5px;
+                vertical-align: middle;
+            }
+            .connection-badge.connected {
+                background-color: #4CAF50;
+                box-shadow: 0 0 5px #4CAF50;
+            }
+            .connection-badge.disconnected {
+                background-color: #F44336;
+                box-shadow: 0 0 5px #F44336;
+            }
+            .live-update-indicator {
+                position: absolute;
+                top: 5px;
+                right: 40px;
+                font-size: 0.7em;
+                padding: 3px 8px;
+                background-color: #4CAF50;
+                color: white;
+                border-radius: 10px;
+                animation: pulse 2s infinite;
+                opacity: 0.8;
+                display: none;
+            }
+            @keyframes pulse {
+                0% { opacity: 0.6; }
+                50% { opacity: 1; }
+                100% { opacity: 0.6; }
+            }
             /* Modal styles for instructions */
             .modal-background {
                 position: fixed;
@@ -243,6 +357,32 @@ class HighScoreSystem {
                 box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
                 max-height: 90vh;
                 overflow-y: auto;
+            }
+            
+            /* Responsive modal styles for smaller screens */
+            @media (max-width: 600px) {
+                .modal-content {
+                    padding: 15px;
+                    width: 95%;
+                    max-height: 95vh;
+                }
+                
+                .modal-content h2 {
+                    font-size: 20px;
+                    margin-top: 0;
+                    margin-bottom: 10px;
+                }
+                
+                .modal-content p, .modal-content ul, .modal-content ol {
+                    font-size: 14px;
+                    line-height: 1.4;
+                    margin-bottom: 10px;
+                }
+                
+                .modal-button {
+                    padding: 8px 15px;
+                    font-size: 14px;
+                }
             }
             .modal-content h2 {
                 margin-top: 0;
@@ -294,24 +434,71 @@ class HighScoreSystem {
                 margin: 0;
                 color: #856404;
             }
+            .info-box {
+                background: #e6f7ff;
+                border-left: 4px solid #1890ff;
+                padding: 10px 15px;
+                margin: 15px 0;
+                border-radius: 0 5px 5px 0;
+            }
+            .info-box p {
+                margin: 0;
+                color: #0c53b7;
+            }
             
-            /* High scores panel styles */
+            /* High scores panel styles - simplified for better compatibility */
             .high-scores-panel {
                 position: fixed;
                 top: 20px;
                 right: 20px;
                 background: rgba(0, 0, 0, 0.85);
                 color: white;
-                padding: 20px;
+                padding: 15px;
                 border-radius: 10px;
-                width: 400px;
-                max-width: 80vw;
+                width: 80%;
+                max-width: 400px;
+                height: auto;
                 max-height: 80vh;
                 overflow-y: auto;
                 z-index: 1000;
                 font-family: Arial, sans-serif;
                 border: 2px solid #0055A4;
                 box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            }
+            
+            /* Media queries for better mobile experience */
+            @media (max-width: 600px) {
+                .high-scores-panel {
+                    width: 90%;
+                    top: 10px;
+                    right: 5%;
+                    padding: 10px;
+                    max-height: 90vh;
+                }
+                
+                .score-divider {
+                    margin: 8px 0;
+                }
+                
+                .refresh-button {
+                    padding: 6px 10px;
+                    margin-bottom: 8px;
+                    font-size: 13px;
+                }
+                
+                .highscore-title {
+                    font-size: 18px;
+                }
+                
+                #score-actions button {
+                    padding: 5px;
+                    font-size: 12px;
+                }
+                
+                .score-item {
+                    padding: 3px 0;
+                    font-size: 13px;
+                }
             }
             .highscore-header {
                 display: flex;
@@ -557,6 +744,194 @@ class HighScoreSystem {
             }
         }
     }
+    
+    /**
+     * Save score to Firebase
+     * @param {Object} scoreRecord - Score record to save
+     * @returns {Promise<boolean>} - Success status
+     */
+    async saveScoreToFirebase(scoreRecord) {
+        try {
+            if (!window.firebaseDatabase) {
+                console.warn('Firebase not available - cannot save score online');
+                return false;
+            }
+            
+            if (!this.isFirebaseConnected) {
+                console.warn('Firebase not connected - cannot save score online');
+                return false;
+            }
+            
+            // Create a reference to the high scores collection
+            const scoresRef = window.firebaseDatabase.ref('highScores');
+            
+            // Push a new score entry with a unique ID
+            let newScoreRef;
+            try {
+                newScoreRef = scoresRef.push();
+            } catch (pushError) {
+                console.error('Error creating reference in Firebase:', pushError);
+                return false;
+            }
+            
+            // Set the score data with timeout
+            try {
+                const setPromise = newScoreRef.set({
+                    playerName: scoreRecord.playerName,
+                    score: scoreRecord.score,
+                    date: scoreRecord.date,
+                    timestamp: scoreRecord.timestamp,
+                    totalCaught: scoreRecord.totalCaught || 0
+                });
+                
+                // Add a timeout to prevent hanging
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Firebase operation timed out')), 5000)
+                );
+                
+                await Promise.race([setPromise, timeoutPromise]);
+                console.log('Score saved to Firebase successfully');
+                return true;
+            } catch (setError) {
+                console.error('Error setting data in Firebase:', setError);
+                return false;
+            }
+        } catch (error) {
+            console.error('Error saving to Firebase:', error);
+            return false;
+        }
+    }
+    
+    /**
+     * Load scores from Firebase
+     * @returns {Promise<Array>} - Array of score records
+     */
+    async loadScoresFromFirebase() {
+        try {
+            if (!window.firebaseDatabase) {
+                console.warn('Firebase database not initialized - cannot load online scores');
+                return [];
+            }
+            
+            if (!this.isFirebaseConnected) {
+                console.warn('Firebase not connected - cannot load online scores');
+                return [];
+            }
+            
+            // Get a reference to the high scores in the database
+            const scoresRef = window.firebaseDatabase.ref('highScores');
+            
+            // Create a promise with timeout to prevent hanging
+            try {
+                const fetchPromise = scoresRef.orderByChild('score')
+                                             .limitToLast(10)
+                                             .once('value');
+                
+                const timeoutPromise = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Firebase operation timed out')), 5000)
+                );
+                
+                // Race between the fetch and the timeout
+                const snapshot = await Promise.race([fetchPromise, timeoutPromise]);
+                
+                const scores = [];
+                
+                // Loop through the results (Firebase returns them in order by key, so we need to sort later)
+                snapshot.forEach((childSnapshot) => {
+                    scores.push({
+                        id: childSnapshot.key,
+                        ...childSnapshot.val()
+                    });
+                });
+                
+                // Sort by score (highest first)
+                return scores.sort((a, b) => b.score - a.score);
+            } catch (fetchError) {
+                console.error('Error fetching data from Firebase:', fetchError);
+                return [];
+            }
+        } catch (error) {
+            console.error('Error loading from Firebase:', error);
+            return [];
+        }
+    }
+    
+    /**
+     * Setup realtime score updates from Firebase
+     */
+    setupRealtimeScoreUpdates() {
+        // Skip setup if not applicable
+        if (this.realtimeUpdateActive) {
+            return;
+        }
+        
+        if (this.environment !== 'online') {
+            console.log('Not in online environment - skipping realtime updates');
+            return;
+        }
+        
+        if (!window.firebaseDatabase) {
+            console.warn('Firebase not available - skipping realtime updates');
+            return;
+        }
+        
+        if (!this.isFirebaseConnected) {
+            console.warn('Firebase not connected - will try realtime updates when connection is established');
+            // We'll still attempt to set up, as the connection might be established later
+        }
+        
+        try {
+            const scoresRef = window.firebaseDatabase.ref('highScores');
+            
+            // Listen for changes to scores with error handling
+            const onValueCallback = (snapshot) => {
+                try {
+                    const scores = [];
+                    
+                    snapshot.forEach((childSnapshot) => {
+                        scores.push({
+                            id: childSnapshot.key,
+                            ...childSnapshot.val()
+                        });
+                    });
+                    
+                    // Sort and update global scores
+                    this.globalScores = scores.sort((a, b) => b.score - a.score);
+                    
+                    // Update the UI
+                    this.displayHighScores();
+                    
+                    // Show live update indicator briefly
+                    const liveIndicator = document.getElementById('live-update-indicator');
+                    if (liveIndicator) {
+                        liveIndicator.style.display = 'block';
+                        setTimeout(() => {
+                            liveIndicator.style.display = 'none';
+                        }, 3000);
+                    }
+                } catch (callbackError) {
+                    console.error('Error in realtime update callback:', callbackError);
+                }
+            };
+            
+            // Handle errors in the subscription
+            const onErrorCallback = (error) => {
+                console.error('Realtime updates error:', error);
+                this.realtimeUpdateActive = false;
+            };
+            
+            // Set up the listener
+            scoresRef.orderByChild('score')
+                   .limitToLast(10)
+                   .on('value', onValueCallback, onErrorCallback);
+            
+            this.realtimeUpdateActive = true;
+            console.log('Realtime score updates activated');
+        } catch (error) {
+            console.error('Error setting up realtime updates:', error);
+            this.realtimeUpdateActive = false;
+        }
+    }
 
     /**
      * Load local scores from localStorage
@@ -605,79 +980,62 @@ class HighScoreSystem {
     }
 
     /**
-     * Load global scores from GitHub
+     * Load global scores from Firebase
      */
     async loadGlobalScores() {
         try {
-            console.log("Loading global scores...");
+            console.log("Loading global scores from Firebase...");
             
-            // Get user and repo from the URL when possible
-            let userName = 'brettenf-uw'; // Default to your GitHub username
-            let repoName = 'leos-butterfly-quest'; // Default repository name
-            
-            // Try to dynamically determine the repo info from the URL
-            const hostname = window.location.hostname;
-            const pathname = window.location.pathname;
-            
-            if (hostname.includes('github.io')) {
-                // Format is usually: username.github.io/repo-name
-                userName = hostname.split('.')[0];
-                // Get the first part of the path as repo
-                if (pathname && pathname.length > 1) {
-                    const pathParts = pathname.split('/').filter(part => part.length > 0);
-                    if (pathParts.length > 0) {
-                        repoName = pathParts[0];
-                    }
-                }
+            // Check if Firebase is available
+            if (!window.firebaseDatabase) {
+                console.error('Firebase database not initialized');
+                this.globalScores = [];
+                return;
             }
             
-            console.log(`Attempting to fetch scores from ${userName}/${repoName}`);
+            // Attempt to load scores from Firebase
+            const scores = await this.loadScoresFromFirebase();
             
-            // Try a direct request to the raw GitHub content
-            const directUrl = `https://raw.githubusercontent.com/${userName}/${repoName}/main/highscores.json`;
-            console.log(`Trying: ${directUrl}`);
-            
-            const response = await fetch(directUrl, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                    'Cache-Control': 'no-cache'
-                },
-                cache: 'no-store'
-            });
-            
-            if (!response.ok) {
-                console.log(`Failed to fetch global scores with status: ${response.status}`);
-                console.log(`Will try loading from published GitHub Pages URL`);
-                
-                // Try an alternative URL through GitHub Pages
-                const pagesUrl = `https://${userName}.github.io/${repoName}/highscores.json`;
-                console.log(`Trying alternate URL: ${pagesUrl}`);
-                
-                const pagesResponse = await fetch(pagesUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Cache-Control': 'no-cache'
-                    },
-                    cache: 'no-store'
-                });
-                
-                if (!pagesResponse.ok) {
-                    console.log(`Both URLs failed, using empty scores array`);
-                    this.globalScores = [];
-                    return;
-                }
-                
-                const data = await pagesResponse.json();
-                console.log("Scores loaded from GitHub Pages URL:", data);
-                this.globalScores = data.scores || [];
+            if (scores && scores.length > 0) {
+                console.log(`Loaded ${scores.length} scores from Firebase`);
+                this.globalScores = scores;
             } else {
-                const data = await response.json();
-                console.log("Scores loaded from raw GitHub URL:", data);
-                this.globalScores = data.scores || [];
+                console.log('No scores found in Firebase, checking for legacy JSON file');
+                
+                // Try loading from the legacy JSON file as fallback
+                try {
+                    const response = await fetch('/highscores.json', {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Cache-Control': 'no-cache'
+                        },
+                        cache: 'no-store'
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        console.log("Legacy scores loaded:", data);
+                        this.globalScores = data.scores || [];
+                        
+                        // If we have legacy scores and Firebase is connected, migrate them
+                        if (this.globalScores.length > 0 && this.isFirebaseConnected) {
+                            console.log('Migrating legacy scores to Firebase');
+                            for (const score of this.globalScores) {
+                                await this.saveScoreToFirebase(score);
+                            }
+                        }
+                    } else {
+                        console.log('No legacy scores found, using empty array');
+                        this.globalScores = [];
+                    }
+                } catch (fallbackError) {
+                    console.error('Error loading legacy scores:', fallbackError);
+                    this.globalScores = [];
+                }
             }
             
+            // Always show the scores panel if we have container
             if (this.container) {
                 this.container.style.display = 'block';
             }
@@ -927,110 +1285,215 @@ class HighScoreSystem {
      * Show clear instructions before submitting a high score
      * @param {string} playerName - Player name
      * @param {number} score - Score value 
+     * @param {number} totalCaught - Optional total butterflies caught
      */
-    showSubmissionInstructions(playerName, score) {
-        // Create modal background
-        const modalBackground = document.createElement('div');
-        modalBackground.className = 'modal-background';
-        
-        // Create modal content
-        const modalContent = document.createElement('div');
-        modalContent.className = 'modal-content';
-        
-        // Title
-        const title = document.createElement('h2');
-        title.textContent = 'Global Score Submission';
-        title.style.color = '#0055A4';
-        title.style.marginBottom = '15px';
-        
-        // Instructions
-        const instructions = document.createElement('div');
-        instructions.className = 'submission-instructions';
-        instructions.innerHTML = `
-            <p>Your score of <strong>${score} points</strong> will be:</p>
+    showSubmissionInstructions(playerName, score, totalCaught = 0) {
+        // Check if we're on a very small screen and adjust content accordingly
+        const isVerySmallScreen = window.innerWidth < 450 || window.innerHeight < 600;
+        try {
+            // Create modal background
+            const modalBackground = document.createElement('div');
+            modalBackground.className = 'modal-background';
             
-            <ol>
-                <li><strong>Saved locally</strong> on this device (available even offline)</li>
-                <li><strong>Submitted globally</strong> to the online leaderboard (if connected to the internet)</li>
-            </ol>
+            // Create modal content
+            const modalContent = document.createElement('div');
+            modalContent.className = 'modal-content';
             
-            <div class="warning-box">
-                <p>⚠️ Global submission details:</p>
-                <ul>
-                    <li>Your name and score will be publicly visible to all players</li>
-                    <li>The score is submitted through GitHub</li>
-                    <li>Global scores may take a few minutes to appear on the leaderboard</li>
-                    <li>If you're playing offline, your score will still be saved locally</li>
-                </ul>
-            </div>
+            // Title
+            const title = document.createElement('h2');
+            title.textContent = this.environment === 'online' ? 'Global Score Submission' : 'Local Score Submission';
+            title.style.color = '#0055A4';
+            title.style.marginBottom = '15px';
             
-            <p><strong>Enter your name to continue:</strong></p>
-        `;
-        
-        // Name input field
-        const nameInput = document.createElement('input');
-        nameInput.type = 'text';
-        nameInput.value = playerName || '';
-        nameInput.placeholder = 'Enter your name';
-        nameInput.maxLength = 20;
-        nameInput.style.width = '100%';
-        nameInput.style.padding = '10px';
-        nameInput.style.fontSize = '18px';
-        nameInput.style.marginTop = '10px';
-        nameInput.style.marginBottom = '20px';
-        nameInput.style.borderRadius = '5px';
-        nameInput.style.border = '1px solid #ccc';
-        
-        // Button container
-        const buttonContainer = document.createElement('div');
-        buttonContainer.className = 'modal-buttons';
-        
-        // Cancel button
-        const cancelBtn = document.createElement('button');
-        cancelBtn.textContent = 'Cancel';
-        cancelBtn.className = 'modal-button cancel';
-        cancelBtn.addEventListener('click', () => {
-            document.body.removeChild(modalBackground);
-        });
-        
-        // Submit button
-        const submitBtn = document.createElement('button');
-        submitBtn.textContent = 'Submit Score';
-        submitBtn.className = 'modal-button primary';
-        submitBtn.addEventListener('click', async () => {
-            const finalName = nameInput.value.trim() || 'Anonymous';
-            document.body.removeChild(modalBackground);
-            await this.submitHighScore(finalName, score);
-        });
-        
-        // Handle enter key in input
-        nameInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                submitBtn.click();
+            // Instructions
+            const instructions = document.createElement('div');
+            instructions.className = 'submission-instructions';
+
+            // Different content based on environment and screen size
+            if (this.environment === 'online' && window.firebaseDatabase && this.isFirebaseConnected) {
+                if (isVerySmallScreen) {
+                    // Simplified content for very small screens
+                    instructions.innerHTML = `
+                        <p>Your score: <strong>${score} points</strong></p>
+                        <p>Will be saved locally and online.</p>
+                        <div class="warning-box">
+                            <p>⚠️ Your name and score will be visible to all players.</p>
+                        </div>
+                    `;
+                } else {
+                    // Full content for normal screens
+                    instructions.innerHTML = `
+                        <p>Your score of <strong>${score} points</strong> will be:</p>
+                        
+                        <ol>
+                            <li><strong>Saved locally</strong> on this device (available even offline)</li>
+                            <li><strong>Submitted globally</strong> to the online leaderboard</li>
+                        </ol>
+                        
+                        <div class="warning-box">
+                            <p>⚠️ Global submission details:</p>
+                            <ul>
+                                <li>Your name and score will be publicly visible to all players</li>
+                                <li>The score is submitted to Firebase in real-time</li>
+                                <li>Global scores will appear instantly on the leaderboard for all players</li>
+                                <li>Other players will see your score immediately with a "LIVE" update indicator</li>
+                            </ul>
+                        </div>
+                    `;
+                }
+            } else {
+                if (isVerySmallScreen) {
+                    // Simplified content for very small screens
+                    instructions.innerHTML = `
+                        <p>Your score: <strong>${score} points</strong></p>
+                        <p>Will be saved locally only.</p>
+                        <div class="info-box">
+                            <p>ℹ️ Playing offline</p>
+                        </div>
+                    `;
+                } else {
+                    // Full content for normal screens
+                    instructions.innerHTML = `
+                        <p>Your score of <strong>${score} points</strong> will be saved locally on this device.</p>
+                        
+                        <div class="info-box">
+                            <p>ℹ️ You're currently playing offline:</p>
+                            <ul>
+                                <li>Your score will be saved to this device only</li>
+                                <li>Scores will persist between game sessions</li>
+                                <li>You can export your scores using the export button</li>
+                            </ul>
+                        </div>
+                    `;
+                }
             }
-        });
-        
-        // Assemble modal
-        buttonContainer.appendChild(cancelBtn);
-        buttonContainer.appendChild(submitBtn);
-        
-        modalContent.appendChild(title);
-        modalContent.appendChild(instructions);
-        modalContent.appendChild(nameInput);
-        modalContent.appendChild(buttonContainer);
-        modalBackground.appendChild(modalContent);
-        
-        // Add to document and focus input
-        document.body.appendChild(modalBackground);
-        setTimeout(() => nameInput.focus(), 100);
+
+            instructions.innerHTML += `<p><strong>Enter your name to continue:</strong></p>`;
+            
+            // Name input field
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.value = playerName || '';
+            nameInput.placeholder = 'Enter your name';
+            nameInput.maxLength = 20;
+            nameInput.style.width = '100%';
+            nameInput.style.padding = '10px';
+            nameInput.style.fontSize = '18px';
+            nameInput.style.marginTop = '10px';
+            nameInput.style.marginBottom = '20px';
+            nameInput.style.borderRadius = '5px';
+            nameInput.style.border = '1px solid #ccc';
+            
+            // Button container
+            const buttonContainer = document.createElement('div');
+            buttonContainer.className = 'modal-buttons';
+            
+            // Cancel button
+            const cancelBtn = document.createElement('button');
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.className = 'modal-button cancel';
+            cancelBtn.addEventListener('click', () => {
+                document.body.removeChild(modalBackground);
+            });
+            
+            // Submit button
+            const submitBtn = document.createElement('button');
+            submitBtn.textContent = 'Submit Score';
+            submitBtn.className = 'modal-button primary';
+            submitBtn.addEventListener('click', () => {
+                try {
+                    const finalName = nameInput.value.trim() || 'Anonymous';
+                    document.body.removeChild(modalBackground);
+                    // Use try/catch instead of Promise.resolve to avoid errors
+                    try {
+                        // When running locally, Firebase methods might not be available
+                        // so we need to handle this specially
+                        if (this.environment === 'local' || !window.firebaseDatabase) {
+                            // Just save locally without trying Firebase
+                            this.saveLocalHighScore({
+                                playerName: finalName,
+                                score: score,
+                                date: new Date().toLocaleString(),
+                                timestamp: Math.floor(Date.now() / 1000),
+                                totalCaught: totalCaught || 0
+                            });
+                            this.updateStatus('Score saved locally only (offline mode)');
+                            this.displayHighScores();
+                        } else {
+                            // Normal flow for online mode
+                            this.submitHighScore(finalName, score, totalCaught);
+                        }
+                    } catch (submitError) {
+                        console.error('Error submitting score:', submitError);
+                        // Fallback to just local storage
+                        this.saveLocalHighScore({
+                            playerName: finalName,
+                            score: score,
+                            date: new Date().toLocaleString(),
+                            timestamp: Math.floor(Date.now() / 1000),
+                            totalCaught: totalCaught || 0
+                        });
+                        this.updateStatus('Error saving online. Score saved locally.');
+                        this.displayHighScores();
+                    }
+                } catch (clickError) {
+                    console.error('Error in submit button click handler:', clickError);
+                    // Try to recover
+                    if (document.body.contains(modalBackground)) {
+                        document.body.removeChild(modalBackground);
+                    }
+                    this.saveLocalHighScore({
+                        playerName: nameInput.value.trim() || 'Anonymous',
+                        score: score,
+                        date: new Date().toLocaleString(),
+                        timestamp: Math.floor(Date.now() / 1000),
+                        totalCaught: totalCaught || 0
+                    });
+                    this.updateStatus('Score saved locally due to an error.');
+                }
+            });
+            
+            // Handle enter key in input
+            nameInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    submitBtn.click();
+                }
+            });
+            
+            // Assemble modal
+            buttonContainer.appendChild(cancelBtn);
+            buttonContainer.appendChild(submitBtn);
+            
+            modalContent.appendChild(title);
+            modalContent.appendChild(instructions);
+            modalContent.appendChild(nameInput);
+            modalContent.appendChild(buttonContainer);
+            modalBackground.appendChild(modalContent);
+            
+            // Add to document and focus input
+            document.body.appendChild(modalBackground);
+            setTimeout(() => nameInput.focus(), 100);
+        } catch (error) {
+            console.error('Error showing submission instructions:', error);
+            // Emergency fallback - just save locally
+            this.saveLocalHighScore({
+                playerName: playerName || 'Anonymous',
+                score: score,
+                date: new Date().toLocaleString(),
+                timestamp: Math.floor(Date.now() / 1000),
+                totalCaught: totalCaught || 0
+            });
+            this.updateStatus('Score saved locally due to an error.');
+        }
     }
 
     /**
      * Submit a high score
      * @param {string} playerName - Player name
      * @param {number} score - Score value
+     * @param {number} totalCaught - Optional total butterflies caught
      */
-    async submitHighScore(playerName, score) {
+    async submitHighScore(playerName, score, totalCaught = 0) {
         // Sanitize player name and validate score
         const sanitizedName = this.sanitizePlayerName(playerName);
         const validScore = this.validateScore(score);
@@ -1040,10 +1503,11 @@ class HighScoreSystem {
             return;
         }
         
-        // Enforce submission cooldown to prevent API abuse
+        // Implement rate limiting to prevent spam
         const now = Date.now();
         if (now - this.lastSubmissionTime < this.submissionCooldown) {
             console.log('Submission cooldown active, skipping submit');
+            this.updateStatus('Please wait a moment before submitting another score');
             return;
         }
         this.lastSubmissionTime = now;
@@ -1053,23 +1517,61 @@ class HighScoreSystem {
             playerName: sanitizedName,
             score: validScore,
             date: new Date().toLocaleString(),
-            timestamp: Math.floor(Date.now() / 1000)
+            timestamp: Math.floor(Date.now() / 1000),
+            totalCaught: totalCaught || 0
         };
         
-        // Save locally first
+        // Save locally first (always works regardless of connection)
         this.saveLocalHighScore(scoreRecord);
         
-        // Always try to submit to GitHub regardless of environment
-        // This ensures scores are always uploaded when possible
-        try {
-            await this.submitScoreToGitHub(scoreRecord);
-            this.updateStatus('Score submitted to global leaderboard!');
-        } catch (error) {
-            console.error('Failed to submit to GitHub:', error);
-            if (this.environment === 'online') {
-                this.updateStatus('Could not submit to global leaderboard. Score saved locally.');
-            } else {
-                this.updateStatus('Playing offline - score saved locally.');
+        // Try to submit to Firebase if online
+        if (this.environment === 'online' && window.firebaseDatabase) {
+            try {
+                // Check for duplicate submission (same player, same score, within 1 minute)
+                const isDuplicate = this.globalScores.some(existingScore => 
+                    existingScore.playerName === sanitizedName && 
+                    existingScore.score === validScore && 
+                    Math.abs(existingScore.timestamp - scoreRecord.timestamp) < 60 // Within 1 minute
+                );
+                
+                if (isDuplicate) {
+                    console.log('Duplicate score detected, not submitting to Firebase');
+                    this.updateStatus('Score already submitted. Saved locally.');
+                    return;
+                }
+                
+                // Save to Firebase
+                const saveResult = await this.saveScoreToFirebase(scoreRecord);
+                
+                if (saveResult) {
+                    this.updateStatus('Score submitted to global leaderboard!');
+                    
+                    // Show live update indicator to illustrate real-time functionality
+                    const liveIndicator = document.getElementById('live-update-indicator');
+                    if (liveIndicator) {
+                        liveIndicator.style.display = 'block';
+                        setTimeout(() => {
+                            liveIndicator.style.display = 'none';
+                        }, 3000);
+                    }
+                } else {
+                    this.updateStatus('Could not connect to global leaderboard. Score saved locally.');
+                }
+            } catch (error) {
+                console.error('Failed to submit to Firebase:', error);
+                this.updateStatus('Error submitting to global leaderboard. Score saved locally.');
+            }
+        } else {
+            this.updateStatus('Playing offline - score saved locally only.');
+        }
+        
+        // Add to global scores immediately so player sees their score
+        // (will be overwritten by real-time updates if connected)
+        if (this.environment === 'online') {
+            this.globalScores.push(scoreRecord);
+            this.globalScores.sort((a, b) => b.score - a.score);
+            if (this.globalScores.length > 10) {
+                this.globalScores = this.globalScores.slice(0, 10);
             }
         }
         
@@ -1114,107 +1616,7 @@ class HighScoreSystem {
         }
     }
 
-    /**
-     * Submit score to GitHub via issues
-     * @param {Object} scoreRecord - Score record
-     */
-    async submitScoreToGitHub(scoreRecord) {
-        try {
-            // Get user and repo dynamically (same as in loadGlobalScores)
-            let userName = 'brettenf-uw'; // Default to your GitHub username
-            let repoName = 'leos-butterfly-quest'; // Default repository name
-            
-            // Try to dynamically determine the repo info from the URL
-            const hostname = window.location.hostname;
-            const pathname = window.location.pathname;
-            
-            if (hostname.includes('github.io')) {
-                userName = hostname.split('.')[0];
-                if (pathname && pathname.length > 1) {
-                    const pathParts = pathname.split('/').filter(part => part.length > 0);
-                    if (pathParts.length > 0) {
-                        repoName = pathParts[0];
-                    }
-                }
-            }
-            
-            console.log(`Attempting to submit score to ${userName}/${repoName}`);
-            
-            // Create issue title
-            const issueTitle = `HIGHSCORE: ${scoreRecord.playerName} - ${scoreRecord.score}`;
-            
-            // Create issue body with JSON data
-            const issueBody = `
-## New High Score Submission
-
-Player: ${scoreRecord.playerName}
-Score: ${scoreRecord.score}
-Date: ${scoreRecord.date}
-
-\`\`\`json
-${JSON.stringify(scoreRecord)}
-\`\`\`
-
-*Submitted automatically by Leo's Butterfly Quest*
-            `;
-            
-            // Submit via GitHub's API
-            const apiUrl = `https://api.github.com/repos/${userName}/${repoName}/issues`;
-            console.log(`Submitting to: ${apiUrl}`);
-            
-            // Try first submitting through the GitHub API
-            try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        title: issueTitle,
-                        body: issueBody
-                    })
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`GitHub API Error: ${response.status}`);
-                }
-                
-                console.log('Score submitted to GitHub successfully via API');
-            } catch (apiError) {
-                console.error('API submission failed:', apiError);
-                
-                // If API fails, try the fallback submit via a form
-                try {
-                    // Open a new tab with a pre-filled GitHub issue form
-                    const issueUrl = `https://github.com/${userName}/${repoName}/issues/new?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(issueBody)}`;
-                    window.open(issueUrl, '_blank');
-                    
-                    // Show instructions to the user
-                    alert("Please manually submit your score in the opened tab.\n" +
-                          "Click 'Submit new issue' to record your high score.");
-                    
-                    console.log('Score submission opened in new tab for manual completion');
-                } catch (fallbackError) {
-                    console.error('Fallback submission also failed:', fallbackError);
-                    throw fallbackError;
-                }
-            }
-            
-            this.updateStatus('Score submitted to global leaderboard!');
-            
-            // Add to global scores immediately so player sees their score
-            this.globalScores.push(scoreRecord);
-            this.globalScores.sort((a, b) => b.score - a.score);
-            if (this.globalScores.length > 10) {
-                this.globalScores = this.globalScores.slice(0, 10);
-            }
-            
-            return true;
-        } catch (error) {
-            console.error('Error submitting to GitHub:', error);
-            throw error;
-        }
-    }
+    // GitHub submission method removed in favor of Firebase implementation
 
     /**
      * Export local scores as a downloadable JSON file
@@ -1510,10 +1912,18 @@ ${JSON.stringify(scoreRecord)}
             
             // Submit each score with a delay to avoid rate limits
             let successCount = 0;
+            
+            // Check if Firebase is available
+            if (!window.firebaseDatabase || !this.isFirebaseConnected) {
+                this.updateStatus('Not connected to Firebase. Cannot submit scores globally.');
+                return;
+            }
+            
             for (const score of scores) {
                 try {
-                    await this.submitScoreToGitHub(score);
-                    successCount++;
+                    // Save to Firebase
+                    const result = await this.saveScoreToFirebase(score);
+                    if (result) successCount++;
                     
                     // Add delay between submissions
                     await new Promise(resolve => setTimeout(resolve, 1000));
