@@ -1833,37 +1833,92 @@ class Game {
             this.ctx.fillStyle = `hsl(${hue}, 80%, 60%)`;
             this.ctx.fillRect(barX, currentY - (isSmallScreen ? 12 : 14), actualBarWidth, barHeight);
             
-            // Draw butterfly image instead of text
-            const butterflySize = isSmallScreen ? 20 : 25;
+            // Calculate a safe size for the butterfly that won't overlap with other elements
+            // Use a smaller size on small screens or if label area is constrained
+            const maxAllowedSize = Math.min(labelWidth - 30, isSmallScreen ? 20 : 25);
+            const butterflySize = Math.max(15, maxAllowedSize); // Don't go smaller than 15px
+            
             if (butterflyImg && butterflyImg.complete && butterflyImg.naturalWidth !== 0) {
+                // Create a safe area for the butterfly
+                const safeX = labelX + 3; // Small margin from left
+                const safeY = currentY - butterflySize/2 - 2; // Vertically centered
+                
+                // Save context to apply clipping (ensures butterfly stays in its area)
+                this.ctx.save();
+                
+                // Optional: add a subtle background to make butterflies stand out
+                this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                this.ctx.beginPath();
+                this.ctx.arc(safeX + butterflySize/2, safeY + butterflySize/2, butterflySize/2, 0, Math.PI * 2);
+                this.ctx.fill();
+                
                 // Draw butterfly with vertical centering
                 this.ctx.drawImage(
                     butterflyImg, 
-                    labelX, 
-                    currentY - butterflySize/2 - 3, // Adjust for vertical centering
+                    safeX, 
+                    safeY,
                     butterflySize, 
                     butterflySize
                 );
                 
-                // Also add a small level indicator
-                this.ctx.fillStyle = '#555';
-                this.ctx.textAlign = 'left';
-                this.ctx.font = `${isSmallScreen ? 11 : 12}px Arial`;
-                this.ctx.fillText(`L${level}`, labelX + butterflySize + 5, currentY);
+                this.ctx.restore();
                 
-                // Special indicator for Queen Butterfly
+                // Add level indicator in a more compact way
+                // Calculate a color based on level for visual distinction
+                const hue = (level * 36) % 360; // Same as the bar color
+                this.ctx.fillStyle = level === 10 ? '#FF4500' : `hsl(${hue}, 60%, 30%)`; // Darker version of bar color
+                this.ctx.textAlign = 'center';
+                this.ctx.font = `bold ${isSmallScreen ? 10 : 11}px Arial`;
+                
+                // Position level number at bottom-right of butterfly
+                const levelX = safeX + butterflySize - 3;
+                const levelY = safeY + butterflySize - 2;
+                
+                // Draw level number with small white outline for better readability
+                this.ctx.save();
+                this.ctx.strokeStyle = 'white';
+                this.ctx.lineWidth = 2;
+                this.ctx.strokeText(level.toString(), levelX, levelY);
+                this.ctx.fillText(level.toString(), levelX, levelY);
+                this.ctx.restore();
+                
+                // Special crown icon for Queen Butterfly (level 10)
                 if (level === 10) {
-                    this.ctx.fillStyle = '#FF4500'; // Orange-red for Queen
-                    this.ctx.font = `bold ${isSmallScreen ? 10 : 11}px Arial`;
-                    this.ctx.fillText('Queen', labelX + butterflySize + 25, currentY);
+                    this.ctx.save();
+                    this.ctx.fillStyle = 'gold';
+                    this.ctx.beginPath();
+                    
+                    // Simple crown drawing
+                    const crownX = safeX;
+                    const crownY = safeY;
+                    const crownSize = butterflySize / 3;
+                    
+                    // Draw a small golden crown
+                    this.ctx.moveTo(crownX, crownY);
+                    this.ctx.lineTo(crownX + crownSize/3, crownY - crownSize/2);
+                    this.ctx.lineTo(crownX + crownSize/2, crownY);
+                    this.ctx.lineTo(crownX + crownSize*2/3, crownY - crownSize/2);
+                    this.ctx.lineTo(crownX + crownSize, crownY);
+                    this.ctx.lineTo(crownX + crownSize, crownY + crownSize/3);
+                    this.ctx.lineTo(crownX, crownY + crownSize/3);
+                    this.ctx.closePath();
+                    
+                    this.ctx.fill();
+                    this.ctx.restore();
                 }
             } else {
-                // Fallback if image not loaded
+                // Fallback if image not loaded - simple text
                 this.ctx.fillStyle = '#333';
-                this.ctx.textAlign = 'right';
-                this.ctx.font = `${isSmallScreen ? 14 : 16}px Arial`;
-                const levelName = level === 10 ? "Queen Butterfly" : `Level ${level}`;
-                this.ctx.fillText(levelName, barX - 10, currentY);
+                this.ctx.textAlign = 'center';
+                this.ctx.font = `${isSmallScreen ? 13 : 14}px Arial`;
+                const levelText = `L${level}`;
+                this.ctx.fillText(levelText, labelX + labelWidth/2, currentY);
+                
+                if (level === 10) {
+                    this.ctx.fillStyle = '#FF4500';
+                    this.ctx.font = `bold ${isSmallScreen ? 9 : 10}px Arial`;
+                    this.ctx.fillText('Queen', labelX + labelWidth/2, currentY + 12);
+                }
             }
             
             // Count text (left-aligned)
@@ -2654,35 +2709,117 @@ class Game {
     }
     
     drawVictoryButterflies() {
-        // Draw decorative butterflies on victory screen using all butterfly types
-        const positions = [
-            { x: this.canvas.width * 0.2, y: this.canvas.height * 0.3, level: 2, scale: 1.3, rotation: Math.PI * 0.1 },
-            { x: this.canvas.width * 0.8, y: this.canvas.height * 0.25, level: 4, scale: 1.4, rotation: -Math.PI * 0.15 },
-            { x: this.canvas.width * 0.15, y: this.canvas.height * 0.7, level: 6, scale: 1.2, rotation: Math.PI * 0.2 },
-            { x: this.canvas.width * 0.85, y: this.canvas.height * 0.75, level: 8, scale: 1.5, rotation: -Math.PI * 0.1 },
-            { x: this.canvas.width * 0.3, y: this.canvas.height * 0.85, level: 10, scale: 1.3, rotation: Math.PI * 0.05 },
-            { x: this.canvas.width * 0.7, y: this.canvas.height * 0.15, level: 12, scale: 1.2, rotation: -Math.PI * 0.2 },
-            { x: this.canvas.width * 0.4, y: this.canvas.height * 0.2, level: 14, scale: 1.4, rotation: Math.PI * 0.15 },
-            { x: this.canvas.width * 0.6, y: this.canvas.height * 0.8, level: 15, scale: 1.5, rotation: -Math.PI * 0.05 }
+        console.log("Drawing victory butterflies");
+        // Get the bounds of the panel where content is displayed
+        const isSmallScreen = this.canvas.height < 700 || this.canvas.width < 1000;
+        const panelWidth = Math.min(Math.max(isSmallScreen ? 500 : 650, this.canvas.width * 0.9), this.canvas.width - 30);
+        const panelHeight = Math.min(Math.max(isSmallScreen ? 400 : 500, this.canvas.height * 0.9), this.canvas.height - 30);
+        const panelX = this.canvas.width / 2 - panelWidth / 2;
+        const panelY = this.canvas.height / 2 - panelHeight / 2;
+        
+        // Place one different butterfly in each corner with wing flapping animation
+        const cornerButterflies = [
+            // Top-left corner butterfly
+            {
+                x: Math.max(60, panelX * 0.25),
+                y: Math.max(60, panelY * 0.25),
+                level: 3, // Orange butterfly
+                scale: 1.4,
+                rotation: Math.PI / 6
+            },
+            // Top-right corner butterfly
+            {
+                x: Math.min(this.canvas.width - 60, panelX + panelWidth + 80),
+                y: Math.max(60, panelY * 0.25),
+                level: 8, // Purple butterfly
+                scale: 1.5,
+                rotation: -Math.PI / 8
+            },
+            // Bottom-left corner butterfly
+            {
+                x: Math.max(60, panelX * 0.3),
+                y: Math.min(this.canvas.height - 60, panelY + panelHeight + 80),
+                level: 5, // Pink butterfly
+                scale: 1.3,
+                rotation: Math.PI / 12
+            },
+            // Bottom-right corner butterfly
+            {
+                x: Math.min(this.canvas.width - 60, panelX + panelWidth + 80),
+                y: Math.min(this.canvas.height - 60, panelY + panelHeight + 80),
+                level: 10, // Queen butterfly
+                scale: 1.6,
+                rotation: -Math.PI / 12
+            }
         ];
         
-        // Draw each butterfly
-        for (const pos of positions) {
-            const imgIndex = Math.min(pos.level - 1, this.butterflyImages.length - 1);
+        // Set fixed positions for small screens to ensure butterflies are visible
+        if (isSmallScreen) {
+            cornerButterflies[0].x = 80; // Top-left
+            cornerButterflies[0].y = 80;
+            
+            cornerButterflies[1].x = this.canvas.width - 80; // Top-right
+            cornerButterflies[1].y = 80;
+            
+            cornerButterflies[2].x = 80; // Bottom-left
+            cornerButterflies[2].y = this.canvas.height - 80;
+            
+            cornerButterflies[3].x = this.canvas.width - 80; // Bottom-right
+            cornerButterflies[3].y = this.canvas.height - 80;
+        }
+        
+        // Get the current time for wing flapping animation
+        const now = Date.now() / 1000;
+        
+        // Draw each corner butterfly
+        for (const b of cornerButterflies) {
+            // Always draw all butterflies - don't filter them out
+            const imgIndex = Math.min(b.level - 1, this.butterflyImages.length - 1);
             if (imgIndex >= 0 && imgIndex < this.butterflyImages.length) {
                 const img = this.butterflyImages[imgIndex];
                 
                 if (img && img.complete && img.naturalWidth !== 0) {
                     this.ctx.save();
-                    this.ctx.translate(pos.x, pos.y);
-                    this.ctx.rotate(pos.rotation);
-                    this.ctx.scale(pos.scale, pos.scale);
                     
+                    // Add subtle glow effect based on butterfly level
+                    if (b.level === 10) { // Queen butterfly
+                        this.ctx.shadowColor = 'rgba(255, 215, 0, 0.6)'; // Gold glow
+                        this.ctx.shadowBlur = 15;
+                    } else if (b.level === 8) {
+                        this.ctx.shadowColor = 'rgba(135, 206, 235, 0.6)'; // Sky blue glow
+                        this.ctx.shadowBlur = 12;
+                    } else if (b.level === 5) {
+                        this.ctx.shadowColor = 'rgba(255, 105, 180, 0.5)'; // Pink glow
+                        this.ctx.shadowBlur = 10;
+                    } else if (b.level === 3) {
+                        this.ctx.shadowColor = 'rgba(255, 165, 0, 0.5)'; // Orange glow
+                        this.ctx.shadowBlur = 10;
+                    }
+                    
+                    // Position the butterfly
+                    this.ctx.translate(b.x, b.y);
+                    this.ctx.rotate(b.rotation);
+                    this.ctx.scale(b.scale, b.scale);
+                    
+                    // Apply wing flapping animation - same technique as in butterfly.js
+                    const wingFlapTime = now + (b.level * 0.2); // Different offset for each butterfly
+                    const wingFlapSpeed = 0.08 + (b.level * 0.008); // Same formula from butterfly.js
+                    const wingFlapState = Math.abs(Math.sin(wingFlapTime / wingFlapSpeed * Math.PI));
+                    
+                    // Apply the wing flap scale effect
+                    const wingScale = 0.8 + (wingFlapState * 0.4);
+                    this.ctx.scale(wingScale, 1);
+                    
+                    // Draw the butterfly
                     const size = 70;
                     this.ctx.drawImage(img, -size/2, -size/2, size, size);
                     
                     this.ctx.restore();
+                } else {
+                    console.log("Butterfly image not loaded properly");
                 }
+            } else {
+                console.log("Invalid butterfly index:", imgIndex);
             }
         }
     }
