@@ -452,6 +452,42 @@ class HighScoreSystem {
                 background: #FFA500;
                 color: white;
             }
+            .refresh-button {
+                display: block;
+                width: 100%;
+                background: #333;
+                color: white;
+                border: none;
+                padding: 8px 15px;
+                margin-bottom: 15px;
+                cursor: pointer;
+                border-radius: 5px;
+                font-family: Arial, sans-serif;
+                font-size: 14px;
+                transition: background-color 0.3s;
+            }
+            .refresh-button:hover {
+                background: #444;
+            }
+            .refresh-button:disabled {
+                opacity: 0.7;
+                cursor: default;
+            }
+            .no-scores-message {
+                text-align: center;
+                padding: 10px;
+                margin: 10px 0;
+                font-style: italic;
+                color: #aaa;
+            }
+            .no-scores-message p {
+                margin: 5px 0;
+            }
+            .no-scores-message .note {
+                font-size: 0.8em;
+                color: #888;
+                margin-top: 10px;
+            }
             .modal-background {
                 position: fixed;
                 top: 0;
@@ -573,19 +609,74 @@ class HighScoreSystem {
      */
     async loadGlobalScores() {
         try {
-            // Use a fixed URL for now to avoid errors with dynamic hostname parsing
-            const repoPath = 'LeosButterflyQuest';
-            const response = await fetch(`https://raw.githubusercontent.com/user/${repoPath}/main/highscores.json`);
+            console.log("Loading global scores...");
+            
+            // Get user and repo from the URL when possible
+            let userName = 'brettenf-uw'; // Default to your GitHub username
+            let repoName = 'leos-butterfly-quest'; // Default repository name
+            
+            // Try to dynamically determine the repo info from the URL
+            const hostname = window.location.hostname;
+            const pathname = window.location.pathname;
+            
+            if (hostname.includes('github.io')) {
+                // Format is usually: username.github.io/repo-name
+                userName = hostname.split('.')[0];
+                // Get the first part of the path as repo
+                if (pathname && pathname.length > 1) {
+                    const pathParts = pathname.split('/').filter(part => part.length > 0);
+                    if (pathParts.length > 0) {
+                        repoName = pathParts[0];
+                    }
+                }
+            }
+            
+            console.log(`Attempting to fetch scores from ${userName}/${repoName}`);
+            
+            // Try a direct request to the raw GitHub content
+            const directUrl = `https://raw.githubusercontent.com/${userName}/${repoName}/main/highscores.json`;
+            console.log(`Trying: ${directUrl}`);
+            
+            const response = await fetch(directUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'Cache-Control': 'no-cache'
+                },
+                cache: 'no-store'
+            });
             
             if (!response.ok) {
                 console.log(`Failed to fetch global scores with status: ${response.status}`);
-                // Just use an empty array rather than throwing
-                this.globalScores = [];
-                return;
+                console.log(`Will try loading from published GitHub Pages URL`);
+                
+                // Try an alternative URL through GitHub Pages
+                const pagesUrl = `https://${userName}.github.io/${repoName}/highscores.json`;
+                console.log(`Trying alternate URL: ${pagesUrl}`);
+                
+                const pagesResponse = await fetch(pagesUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Cache-Control': 'no-cache'
+                    },
+                    cache: 'no-store'
+                });
+                
+                if (!pagesResponse.ok) {
+                    console.log(`Both URLs failed, using empty scores array`);
+                    this.globalScores = [];
+                    return;
+                }
+                
+                const data = await pagesResponse.json();
+                console.log("Scores loaded from GitHub Pages URL:", data);
+                this.globalScores = data.scores || [];
+            } else {
+                const data = await response.json();
+                console.log("Scores loaded from raw GitHub URL:", data);
+                this.globalScores = data.scores || [];
             }
-            
-            const data = await response.json();
-            this.globalScores = data.scores || [];
             
             if (this.container) {
                 this.container.style.display = 'block';
@@ -619,6 +710,37 @@ class HighScoreSystem {
         // Clear previous content
         scoresDisplay.innerHTML = '';
         
+        // Add refresh scores button
+        const refreshButton = document.createElement('button');
+        refreshButton.textContent = '🔄 Refresh Scores';
+        refreshButton.className = 'refresh-button';
+        refreshButton.addEventListener('click', async () => {
+            refreshButton.textContent = '⌛ Refreshing...';
+            refreshButton.disabled = true;
+            
+            try {
+                // Force a reload of global scores
+                await this.loadGlobalScores();
+                refreshButton.textContent = '✅ Refreshed!';
+                setTimeout(() => {
+                    refreshButton.textContent = '🔄 Refresh Scores';
+                    refreshButton.disabled = false;
+                }, 1500);
+                
+                // Redisplay scores
+                this.displayHighScores();
+            } catch (error) {
+                console.error('Error refreshing scores:', error);
+                refreshButton.textContent = '❌ Refresh Failed';
+                setTimeout(() => {
+                    refreshButton.textContent = '🔄 Refresh Scores';
+                    refreshButton.disabled = false;
+                }, 1500);
+            }
+        });
+        
+        scoresDisplay.appendChild(refreshButton);
+        
         // Combine global and local scores
         this.combinedScores = [];
         
@@ -647,41 +769,46 @@ class HighScoreSystem {
             
             // Create scores list for global scores
             this.renderScoresList(scoresDisplay, this.globalScores, 'global');
+        } else {
+            // Add message when no global scores are available
+            const noGlobalMessage = document.createElement('div');
+            noGlobalMessage.className = 'no-scores-message';
+            noGlobalMessage.innerHTML = `
+                <p>No global scores available yet.</p>
+                <p>Be the first to get on the global leaderboard!</p>
+                <p class="note">Note: Global scores can take a few minutes to update after submission.</p>
+            `;
+            scoresDisplay.appendChild(noGlobalMessage);
         }
         
-        // Add local scores if global scores are missing or less than 10
-        if (!this.globalScores || this.globalScores.length === 0 || this.globalScores.length < 10) {
-            // Only add a divider if we already have global scores
-            if (this.globalScores && this.globalScores.length > 0) {
-                const divider = document.createElement('hr');
-                divider.className = 'score-divider';
-                scoresDisplay.appendChild(divider);
-            }
-            
-            // Create local scores badge
-            const localBadge = document.createElement('div');
-            localBadge.className = 'score-section-header';
-            
-            const badgeSpan = document.createElement('span');
-            badgeSpan.className = 'environment-badge badge-local';
-            badgeSpan.textContent = 'LOCAL';
-            
-            localBadge.appendChild(badgeSpan);
-            localBadge.appendChild(document.createTextNode(' Your Personal Scores'));
-            
-            scoresDisplay.appendChild(localBadge);
-            
-            // Add local scores to the combined list with a source flag
-            this.localScores.forEach(score => {
-                this.combinedScores.push({
-                    ...score,
-                    source: 'local'
-                });
+        // Always show the divider and local scores
+        const divider = document.createElement('hr');
+        divider.className = 'score-divider';
+        scoresDisplay.appendChild(divider);
+        
+        // Create local scores badge
+        const localBadge = document.createElement('div');
+        localBadge.className = 'score-section-header';
+        
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'environment-badge badge-local';
+        badgeSpan.textContent = 'LOCAL';
+        
+        localBadge.appendChild(badgeSpan);
+        localBadge.appendChild(document.createTextNode(' Your Personal Scores'));
+        
+        scoresDisplay.appendChild(localBadge);
+        
+        // Add local scores to the combined list with a source flag
+        this.localScores.forEach(score => {
+            this.combinedScores.push({
+                ...score,
+                source: 'local'
             });
-            
-            // Create scores list for local scores
-            this.renderScoresList(scoresDisplay, this.localScores, 'local');
-        }
+        });
+        
+        // Create scores list for local scores
+        this.renderScoresList(scoresDisplay, this.localScores, 'local');
         
         // If both lists are empty, show a message
         if (this.combinedScores.length === 0) {
@@ -891,6 +1018,26 @@ class HighScoreSystem {
      */
     async submitScoreToGitHub(scoreRecord) {
         try {
+            // Get user and repo dynamically (same as in loadGlobalScores)
+            let userName = 'brettenf-uw'; // Default to your GitHub username
+            let repoName = 'leos-butterfly-quest'; // Default repository name
+            
+            // Try to dynamically determine the repo info from the URL
+            const hostname = window.location.hostname;
+            const pathname = window.location.pathname;
+            
+            if (hostname.includes('github.io')) {
+                userName = hostname.split('.')[0];
+                if (pathname && pathname.length > 1) {
+                    const pathParts = pathname.split('/').filter(part => part.length > 0);
+                    if (pathParts.length > 0) {
+                        repoName = pathParts[0];
+                    }
+                }
+            }
+            
+            console.log(`Attempting to submit score to ${userName}/${repoName}`);
+            
             // Create issue title
             const issueTitle = `HIGHSCORE: ${scoreRecord.playerName} - ${scoreRecord.score}`;
             
@@ -910,22 +1057,47 @@ ${JSON.stringify(scoreRecord)}
             `;
             
             // Submit via GitHub's API
-            const response = await fetch(`https://api.github.com/repos/${this.repoOwner}/${this.repoName}/issues`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    title: issueTitle,
-                    body: issueBody
-                })
-            });
+            const apiUrl = `https://api.github.com/repos/${userName}/${repoName}/issues`;
+            console.log(`Submitting to: ${apiUrl}`);
             
-            if (!response.ok) {
-                throw new Error(`GitHub API Error: ${response.status}`);
+            // Try first submitting through the GitHub API
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        title: issueTitle,
+                        body: issueBody
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`GitHub API Error: ${response.status}`);
+                }
+                
+                console.log('Score submitted to GitHub successfully via API');
+            } catch (apiError) {
+                console.error('API submission failed:', apiError);
+                
+                // If API fails, try the fallback submit via a form
+                try {
+                    // Open a new tab with a pre-filled GitHub issue form
+                    const issueUrl = `https://github.com/${userName}/${repoName}/issues/new?title=${encodeURIComponent(issueTitle)}&body=${encodeURIComponent(issueBody)}`;
+                    window.open(issueUrl, '_blank');
+                    
+                    // Show instructions to the user
+                    alert("Please manually submit your score in the opened tab.\n" +
+                          "Click 'Submit new issue' to record your high score.");
+                    
+                    console.log('Score submission opened in new tab for manual completion');
+                } catch (fallbackError) {
+                    console.error('Fallback submission also failed:', fallbackError);
+                    throw fallbackError;
+                }
             }
             
-            console.log('Score submitted to GitHub successfully');
             this.updateStatus('Score submitted to global leaderboard!');
             
             // Add to global scores immediately so player sees their score
