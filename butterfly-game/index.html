@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Le Chasseur de Papillons</title>
+    <link rel="stylesheet" href="styles/main.css">
+    <style>
+        /* Ensure the game is fully visible */
+        html, body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #f0f0f0;
+        }
+        
+        #game-container {
+            width: 100%;
+            height: 100%;
+            display: block;
+            position: relative;
+        }
+        
+        canvas {
+            display: block;
+            background-color: #87CEEB; /* Sky blue fallback color */
+        }
+        
+        /* Fallback content if game fails to load */
+        #fallback-content {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            padding: 20px;
+            background-color: rgba(255, 255, 255, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Loading indicator */
+        #loading-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
+            background-color: rgba(0,0,0,0.6);
+            padding: 20px 40px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Game container with canvas -->
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <!-- Loading indicator will be shown during initialization -->
+        <div id="loading-indicator">Loading Leo's Butterfly Game...</div>
+        
+        <!-- Fallback content if game fails to load -->
+        <div id="fallback-content">
+            <h1>Game Loading Issue</h1>
+            <p>There was a problem loading the game.</p>
+            <p id="error-details"></p>
+            <button onclick="location.reload()" style="padding: 10px 20px; margin-top: 20px; cursor: pointer;">
+                Try Again
+            </button>
+        </div>
+    </div>
+    
+    <!-- Preload critical scripts -->
+    <script>
+        // Monitor script loading and provide fallback
+        window.gameLoadingError = false;
+        
+        // Handle any global errors
+        window.addEventListener('error', function(event) {
+            console.error("Global error caught:", event.error || event.message);
+            const errorDetails = document.getElementById('error-details');
+            if (errorDetails) {
+                errorDetails.textContent = event.error ? event.error.message : event.message;
+            }
+            showFallbackContent();
+        });
+        
+        // Show fallback content if needed
+        function showFallbackContent() {
+            window.gameLoadingError = true;
+            document.getElementById('loading-indicator').style.display = 'none';
+            document.getElementById('fallback-content').style.display = 'block';
+        }
+        
+        // Hide loading indicator when game starts
+        function hideLoading() {
+            if (!window.gameLoadingError) {
+                document.getElementById('loading-indicator').style.display = 'none';
+            }
+        }
+        
+        // Set a timeout to ensure loading indicator doesn't stay forever
+        setTimeout(function() {
+            // If game hasn't loaded in 10 seconds, show fallback
+            const loadingIndicator = document.getElementById('loading-indicator');
+            if (loadingIndicator && loadingIndicator.style.display !== 'none') {
+                showFallbackContent();
+                const errorDetails = document.getElementById('error-details');
+                if (errorDetails) {
+                    errorDetails.textContent = "Game took too long to load. This may be due to missing assets or slow connection.";
+                }
+            }
+        }, 10000);
+    </script>
+    
+    <!-- Game scripts -->
+    <script src="scripts/utils.js"></script>
+    <script src="scripts/butterfly.js"></script>
+    <script src="scripts/player.js"></script>
+    <script src="scripts/game.js"></script>
+    
+    <!-- Script to initialize game after everything loads -->
+    <script>
+        window.addEventListener('load', function() {
+            // Hide loading indicator after a small delay to ensure rendering
+            setTimeout(hideLoading, 1000);
+        });
+    </script>
+
+    <!-- Add fallback content in case JavaScript is disabled -->
+    <noscript>
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: white; padding: 20px; border-radius: 10px;">
+            <h1>JavaScript Required</h1>
+            <p>This game requires JavaScript to run. Please enable JavaScript in your browser settings.</p>
+        </div>
+    </noscript>
+</body>
+</html>
