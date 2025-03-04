@@ -672,10 +672,16 @@ class Game {
         // Make sure the game is not running in instructions screen
         this.isRunning = false;
         
-        // Setup instructions click handler
-        const buttonWidth = 200;
-        const buttonHeight = 50;
-        const buttonY = this.canvas.height/2 + 180;
+        // Determine if we're on a small screen for button sizing
+        const isSmallScreen = this.canvas.width < 600 || this.canvas.height < 500;
+        
+        // Setup instructions click handler with responsive dimensions
+        const buttonWidth = isSmallScreen ? 150 : 200;
+        const buttonHeight = isSmallScreen ? 40 : 50;
+        
+        // Calculate overlay height to position button correctly
+        const overlayHeight = isSmallScreen ? Math.min(360, this.canvas.height * 0.8) : 440;
+        const buttonY = this.canvas.height/2 + overlayHeight/2 - (isSmallScreen ? 30 : 40);
         
         // Add click listener for back button
         const instructionsClick = (e) => {
@@ -700,24 +706,41 @@ class Game {
     }
     
     renderInstructionsScreen() {
-        // Semi-transparent overlay
+        // Determine if we're on a small screen
+        const isSmallScreen = this.canvas.width < 600 || this.canvas.height < 500;
+        
+        // Adjust overlay size for small screens
+        let overlayWidth = isSmallScreen ? Math.min(320, this.canvas.width * 0.9) : 600;
+        let overlayHeight = isSmallScreen ? Math.min(360, this.canvas.height * 0.8) : 440;
+        
+        // Semi-transparent overlay (centered)
         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-        this.ctx.fillRect(this.canvas.width/2 - 300, this.canvas.height/2 - 220, 600, 440);
+        this.ctx.fillRect(
+            this.canvas.width/2 - overlayWidth/2, 
+            this.canvas.height/2 - overlayHeight/2, 
+            overlayWidth, 
+            overlayHeight
+        );
+        
+        // Adjust font sizes for small screens
+        const titleFontSize = isSmallScreen ? 28 : 36;
+        const instructionsFontSize = isSmallScreen ? 16 : 20;
+        const buttonFontSize = isSmallScreen ? 18 : 24;
         
         // Title
         this.ctx.fillStyle = '#0055A4';  // French flag blue
-        this.ctx.font = 'bold 36px Arial';
+        this.ctx.font = `bold ${titleFontSize}px Arial`;
         this.ctx.textAlign = 'center';
-        this.ctx.fillText('Instructions', this.canvas.width/2, this.canvas.height/2 - 170);
+        this.ctx.fillText('Instructions', this.canvas.width/2, this.canvas.height/2 - overlayHeight/2 + 50);
         
         // Instructions text
         this.ctx.fillStyle = '#333';
-        this.ctx.font = '20px Arial';
+        this.ctx.font = `${instructionsFontSize}px Arial`;
         this.ctx.textAlign = 'left';
         
-        const instructionsX = this.canvas.width/2 - 260;
-        let instructionsY = this.canvas.height/2 - 120;
-        const lineHeight = 30;
+        const instructionsX = this.canvas.width/2 - overlayWidth/2 + (isSmallScreen ? 20 : 40);
+        let instructionsY = this.canvas.height/2 - overlayHeight/2 + 100;
+        const lineHeight = isSmallScreen ? 24 : 30;
         
         this.ctx.fillText('1. Click on butterflies to catch them with your net', instructionsX, instructionsY);
         instructionsY += lineHeight;
@@ -733,25 +756,25 @@ class Game {
         instructionsY += lineHeight;
         
         // Fun French phrases
-        instructionsY += 20;
+        instructionsY += isSmallScreen ? 10 : 20;
         this.ctx.fillStyle = '#EF4135';  // French flag red
-        this.ctx.font = 'italic 20px Arial';
+        this.ctx.font = `italic ${instructionsFontSize}px Arial`;
         this.ctx.fillText('"Attrape les papillons!"', instructionsX, instructionsY);
         instructionsY += lineHeight;
-        this.ctx.fillText('"C\'est magnifique!"', instructionsX + 100, instructionsY);
+        this.ctx.fillText('"C\'est magnifique!"', instructionsX + (isSmallScreen ? 60 : 100), instructionsY);
         
         // Back button
-        const buttonWidth = 200;
-        const buttonHeight = 50;
-        const buttonY = this.canvas.height/2 + 180;
+        const buttonWidth = isSmallScreen ? 150 : 200;
+        const buttonHeight = isSmallScreen ? 40 : 50;
+        const buttonY = this.canvas.height/2 + overlayHeight/2 - (isSmallScreen ? 30 : 40);
         
         this.ctx.fillStyle = '#0055A4';  // Blue button
         this.ctx.fillRect(this.canvas.width/2 - buttonWidth/2, buttonY - buttonHeight/2, buttonWidth, buttonHeight);
         
         this.ctx.fillStyle = 'white';
-        this.ctx.font = 'bold 24px Arial';
+        this.ctx.font = `bold ${buttonFontSize}px Arial`;
         this.ctx.textAlign = 'center';
-        this.ctx.fillText('Back to Menu', this.canvas.width/2, buttonY + 8);
+        this.ctx.fillText('Back to Menu', this.canvas.width/2, buttonY + (isSmallScreen ? 6 : 8));
     }
     
     start() {
@@ -1396,9 +1419,15 @@ class Game {
         
         // Draw level info with nicer styling
         if (this.isRunning && !this.isLevelTransitioning) {
+            // Check if we're on a small screen
+            const isSmallScreen = this.canvas.width < 600;
+            
+            // Adjust sizes for small screens
+            const panelWidth = isSmallScreen ? 140 : 180;
+            const panelHeight = isSmallScreen ? 60 : 70;
+            const fontSize = isSmallScreen ? 18 : 22;
+            
             // Background panel for score and level (left side)
-            const panelWidth = 180;
-            const panelHeight = 70;
             this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
             this.ctx.fillRect(10, 10, panelWidth, panelHeight);
             
@@ -1409,32 +1438,38 @@ class Game {
             
             // Level text
             this.ctx.fillStyle = '#0055A4';
-            this.ctx.font = 'bold 22px Arial';
+            this.ctx.font = `bold ${fontSize}px Arial`;
             this.ctx.textAlign = 'left';
-            this.ctx.fillText(`Level: ${this.currentLevel}`, 20, 35);
+            this.ctx.fillText(`Level: ${this.currentLevel}`, 20, isSmallScreen ? 32 : 35);
             
             // Score text
-            this.ctx.fillText(`Score: ${this.score}`, 20, 65);
+            this.ctx.fillText(`Score: ${this.score}`, 20, isSmallScreen ? 55 : 65);
             
-            // Display level timer countdown (center top)
+            // Display level timer countdown (center top or right top on small screens)
             if (this.levelTimer !== undefined) {
                 const timeLeft = Math.max(0, Math.ceil(10 - this.levelTimer));
                 
-                // Timer panel - centered at top
-                const timerWidth = 120;
+                // Timer panel positioning - adjust for screen size
+                const timerWidth = isSmallScreen ? 100 : 120;
+                const timerX = isSmallScreen ? 
+                    // On small screens, position to the right
+                    this.canvas.width - timerWidth - 10 : 
+                    // On larger screens, center it
+                    this.canvas.width/2 - timerWidth/2;
+                    
                 this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                this.ctx.fillRect(this.canvas.width/2 - timerWidth/2, 10, timerWidth, 40);
+                this.ctx.fillRect(timerX, 10, timerWidth, isSmallScreen ? 35 : 40);
                 
                 // Add a border
                 this.ctx.strokeStyle = '#0055A4';
                 this.ctx.lineWidth = 2;
-                this.ctx.strokeRect(this.canvas.width/2 - timerWidth/2, 10, timerWidth, 40);
+                this.ctx.strokeRect(timerX, 10, timerWidth, isSmallScreen ? 35 : 40);
                 
                 // Timer text
                 this.ctx.fillStyle = timeLeft <= 3 ? '#EF4135' : '#0055A4'; // Red when low time
-                this.ctx.font = 'bold 22px Arial';
+                this.ctx.font = `bold ${fontSize}px Arial`;
                 this.ctx.textAlign = 'center';
-                this.ctx.fillText(`Time: ${timeLeft}s`, this.canvas.width/2, 35);
+                this.ctx.fillText(`Time: ${timeLeft}s`, timerX + timerWidth/2, isSmallScreen ? 32 : 35);
             }
             
             // Special indicator for level 10 (final boss level)
